@@ -1,0 +1,149 @@
+import tkinter as tk
+from tkinter import font
+import subprocess
+import shutil
+
+class LuaExecutor(tk.Tk):
+    def __init__(self, lua_path="lua"):
+        super().__init__()
+        self.lua_path = lua_path
+        self.full_height = 550
+        self.compact_height = 40
+        self.width = 600
+        self.geometry(f"{self.width}x{self.full_height}+100+100")
+        self.overrideredirect(True)
+        self.configure(bg='lightblue')
+
+        self.widgets_hidden = False
+        self._offsetx = 0
+        self._offsety = 0
+
+        # Main content frame
+        self.content_frame = tk.Frame(self, bg='black')
+        self.content_frame.pack(fill='both', expand=True, padx=3, pady=(3, 0))
+
+        # Top draggable bar
+        self.top_bar = tk.Frame(self.content_frame, bg='black', height=30)
+        self.top_bar.pack(fill='x', side='top')
+
+        title_font = font.Font(family="Helvetica", size=14)
+        self.title_label = tk.Label(self.top_bar, text="v0xecutor by p1xel078", fg='white', bg='black', font=title_font)
+        self.title_label.pack(side='left', padx=10)
+
+        self.close_button = tk.Button(self.top_bar, text="✕", fg='white', bg='black', bd=0,
+                                      font=("Helvetica", 14, "bold"),
+                                      activeforeground='blue', activebackground='black',
+                                      command=self.destroy)
+        self.close_button.pack(side='right', padx=10)
+
+        for widget in [self.top_bar, self.title_label, self.close_button]:
+            widget.bind("<ButtonPress-1>", self.click_window)
+            widget.bind("<B1-Motion>", self.drag_window)
+
+        # Input Text
+        self.input_text = tk.Text(self.content_frame, height=12, bg='black', fg='white', insertbackground='white',
+                                  highlightbackground='lightblue', highlightthickness=2, bd=0)
+        self.input_text.pack(fill='x', padx=15, pady=5)
+
+        # Run Button wrapped with lightblue border frame like hide/show button
+        self.run_button_border = tk.Frame(self.content_frame, bg='lightblue')
+        self.run_button_border.pack(pady=10, padx=15, fill='x')
+
+        self.run_button = tk.Button(self.run_button_border, text="Run Code", command=self.run_code,
+                                    bg='black', fg='white', activebackground='blue', activeforeground='white',
+                                    bd=0, font=("Helvetica", 12))
+        self.run_button.pack(fill='both', expand=True, padx=1, pady=1)
+
+        # Output Text
+        self.output_text = tk.Text(self.content_frame, height=12, bg='black', fg='white', insertbackground='white',
+                                   highlightbackground='lightblue', highlightthickness=2, bd=0, state='disabled')
+        self.output_text.pack(fill='x', padx=15, pady=(5, 10))
+
+        # Toggle Frame (always present)
+        self.toggle_frame = tk.Frame(self, bg='lightblue', height=35)
+        self.toggle_frame.pack(fill='x', side='bottom')
+
+        # Create a frame with lightblue background as border around toggle button
+        self.toggle_button_border = tk.Frame(self.toggle_frame, bg='lightblue', bd=0)
+        self.toggle_button_border.pack(fill='both', expand=True, padx=1, pady=1)  # small padding inside border frame
+
+        self.toggle_button = tk.Button(self.toggle_button_border, text="Hide", bg='black', fg='white',
+                                       font=("Helvetica", 10), activebackground='blue',
+                                       bd=0,
+                                       command=self.toggle_gui)
+        self.toggle_button.pack(fill='both', expand=True)
+
+        # Make toggle bar and button draggable
+        for widget in [self.toggle_frame, self.toggle_button_border, self.toggle_button]:
+            widget.bind("<ButtonPress-1>", self.click_window)
+            widget.bind("<B1-Motion>", self.drag_window)
+
+        # Lua check
+        if not shutil.which(self.lua_path):
+            self.write_output(f"Lua interpreter not found: '{self.lua_path}'\n"
+                              "Install it or update lua_path in code.")
+
+    def click_window(self, event):
+        self._offsetx = event.x
+        self._offsety = event.y
+
+    def drag_window(self, event):
+        x = self.winfo_pointerx() - self._offsetx
+        y = self.winfo_pointery() - self._offsety
+        self.geometry(f'{self.width}x{self.winfo_height()}+{x}+{y}')
+
+    def run_code(self):
+        code = self.input_text.get("1.0", tk.END).strip()
+        if not code:
+            self.write_output("No code to run.")
+            return
+
+        if not shutil.which(self.lua_path):
+            self.write_output(f"Lua interpreter not found: '{self.lua_path}'")
+            return
+
+        try:
+            process = subprocess.run(
+                [self.lua_path, "-"],
+                input=code.encode('utf-8'),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=10
+            )
+            output = process.stdout.decode('utf-8')
+            error = process.stderr.decode('utf-8')
+            if error:
+                output += "\n[stderr]\n" + error
+            self.write_output(output)
+        except subprocess.TimeoutExpired:
+            self.write_output("Execution timed out.")
+        except Exception as e:
+            self.write_output(f"Error running Lua:\n{e}")
+
+    def write_output(self, text):
+        self.output_text.config(state='normal')
+        self.output_text.delete("1.0", tk.END)
+        self.output_text.insert(tk.END, text)
+        self.output_text.config(state='disabled')
+
+    def toggle_gui(self):
+        x = self.winfo_x()
+        y = self.winfo_y()
+        delta = self.full_height - self.compact_height
+
+        if self.widgets_hidden:
+            # Show content and move window up
+            self.content_frame.pack(fill='both', expand=True, padx=3, pady=(3, 0))
+            self.geometry(f"{self.width}x{self.full_height}+{x}+{y - delta}")
+            self.toggle_button.config(text="Hide")
+        else:
+            # Hide content and move window down
+            self.content_frame.forget()
+            self.geometry(f"{self.width}x{self.compact_height}+{x}+{y + delta}")
+            self.toggle_button.config(text="Show")
+
+        self.widgets_hidden = not self.widgets_hidden
+
+if __name__ == "__main__":
+    app = LuaExecutor(lua_path="lua")
+    app.mainloop()
