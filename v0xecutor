@@ -1,0 +1,116 @@
+import tkinter as tk
+from tkinter import font
+import subprocess
+import shutil
+
+class LuaExecutor(tk.Tk):
+    def __init__(self, lua_path="lua"):
+        super().__init__()
+        self.overrideredirect(True)  # Removes OS title bar
+
+        self.title("v0xecutor by p1xel078")
+        self.configure(bg='lightblue')  # Red border on edges
+        
+        # Window size and position
+        self.geometry("600x550+100+100")
+        self.resizable(False, False)
+        
+        # Variables for dragging
+        self._offsetx = 0
+        self._offsety = 0
+
+        # Inner frame with black background
+        self.inner_frame = tk.Frame(self, bg='black')
+        self.inner_frame.pack(fill='both', expand=True, padx=3, pady=3)
+
+        # Top bar (acts as draggable title bar)
+        self.top_bar = tk.Frame(self.inner_frame, bg='black', height=30)
+        self.top_bar.pack(fill='x', side='top')
+
+        # Title text
+        title_font = font.Font(family="Helvetica", size=14, weight="normal")
+        self.title_label = tk.Label(self.top_bar, text="v0xecutor by p1xel078", fg='white', bg='black', font=title_font)
+        self.title_label.pack(side='left', padx=10)
+
+        # Close button
+        self.close_button = tk.Button(self.top_bar, text="✕", fg='white', bg='black', bd=0, font=("Helvetica", 14, "bold"),
+                                      activeforeground='blue', activebackground='black', command=self.destroy)
+        self.close_button.pack(side='right', padx=10)
+
+        # Bind drag only on title and close button
+        self.top_bar.bind("<ButtonPress-1>", self.click_window)
+        self.top_bar.bind("<B1-Motion>", self.drag_window)
+        self.title_label.bind("<ButtonPress-1>", self.click_window)
+        self.title_label.bind("<B1-Motion>", self.drag_window)
+        self.close_button.bind("<ButtonPress-1>", self.click_window)
+        self.close_button.bind("<B1-Motion>", self.drag_window)
+
+        # Input box
+        self.input_text = tk.Text(self.inner_frame, height=12, bg='black', fg='white', insertbackground='white',
+                                  highlightbackground='lightblue', highlightthickness=2, bd=0)
+        self.input_text.pack(fill='x', padx=15, pady=5)
+
+        # Run button
+        self.run_button = tk.Button(self.inner_frame, text="Run Code", command=self.run_code,
+                                    bg='black', fg='white', activebackground='blue', activeforeground='white',
+                                    highlightbackground='lightblue', highlightthickness=2, bd=0, font=("Helvetica", 12, "normal"))
+        self.run_button.pack(pady=10)
+
+        # Output box
+        self.output_text = tk.Text(self.inner_frame, height=12, bg='black', fg='white', insertbackground='white',
+                                   highlightbackground='lightblue', highlightthickness=2, bd=0, state='disabled')
+        self.output_text.pack(fill='x', padx=15, pady=(5, 15))
+
+        # Lua path
+        self.lua_path = lua_path
+        if not shutil.which(self.lua_path):
+            self.write_output(f"Lua interpreter not found: '{self.lua_path}'\n"
+                              "Install it or update lua_path in code.")
+
+    def click_window(self, event):
+        self._offsetx = event.x
+        self._offsety = event.y
+
+    def drag_window(self, event):
+        x = self.winfo_pointerx() - self._offsetx
+        y = self.winfo_pointery() - self._offsety
+        self.geometry(f'+{x}+{y}')
+
+    def run_code(self):
+        code = self.input_text.get("1.0", tk.END).strip()
+        if not code:
+            self.write_output("No code to run.")
+            return
+
+        if not shutil.which(self.lua_path):
+            self.write_output(f"Lua interpreter not found: '{self.lua_path}'")
+            return
+
+        try:
+            process = subprocess.run(
+                [self.lua_path, "-"],
+                input=code.encode('utf-8'),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=10
+            )
+            output = process.stdout.decode('utf-8')
+            error = process.stderr.decode('utf-8')
+            if error:
+                output += "\n[stderr]\n" + error
+            self.write_output(output)
+        except subprocess.TimeoutExpired:
+            self.write_output("Execution timed out.")
+        except Exception as e:
+            self.write_output(f"Error running Lua:\n{e}")
+
+    def write_output(self, text):
+        self.output_text.config(state='normal')
+        self.output_text.delete("1.0", tk.END)
+        self.output_text.insert(tk.END, text)
+        self.output_text.config(state='disabled')
+
+
+if __name__ == "__main__":
+    app = LuaExecutor(lua_path="lua")  # Change if lua isn't in your PATH
+    app.mainloop()
